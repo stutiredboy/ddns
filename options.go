@@ -1,13 +1,9 @@
 package dnsp
 
 import (
-	"errors"
 	"fmt"
 	"net"
-	"net/url"
-	"os"
 	"strings"
-	"time"
 )
 
 // Options can be passed to NewServer().
@@ -15,7 +11,6 @@ type Options struct {
 	Net     string
 	Bind    string
 	Resolve []string
-	Poll    time.Duration
 
 	Whitelist string
 	Blacklist string
@@ -51,35 +46,5 @@ func (o *Options) validate() error {
 		o.Resolve[i] = addr.String()
 	}
 
-	if o.Poll != 0 && o.Poll < time.Second {
-		return errors.New("--poll cannot be shorter than 1s")
-	}
-	o.Poll -= o.Poll % time.Second
-
-	var err error
-	if o.Whitelist != "" {
-		if o.Blacklist != "" {
-			return errors.New("--whitelist and --blacklist are mutually exclusive")
-		}
-		if o.Whitelist, err = pathOrURL(o.Whitelist); err != nil {
-			return err
-		}
-	}
-	if o.Blacklist != "" {
-		if o.Blacklist, err = pathOrURL(o.Blacklist); err != nil {
-			return err
-		}
-	}
-
 	return nil
-}
-
-func pathOrURL(path string) (string, error) {
-	if u, err := url.Parse(path); err == nil && u.Host != "" {
-		return u.String(), nil
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return "", err
-	}
-	return path, nil
 }

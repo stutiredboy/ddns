@@ -24,7 +24,7 @@ func main() {
 		cli.StringFlag{
 			Name:   "net, n",
 			Value:  "udp",
-			Usage:  "listen protocol (‘tcp’ or ‘udp’)",
+			Usage:  "listen protocol ('tcp' or 'udp')",
 			EnvVar: "DNSP_NET",
 		},
 		cli.StringFlag{
@@ -39,26 +39,6 @@ func main() {
 			Usage:  "comma-separated list of name servers (host:port or host)",
 			EnvVar: "DNSP_SERVER",
 		},
-		cli.StringFlag{
-			Name:   "whitelist, w",
-			Usage:  "URL or path to file containing whitelisted hosts",
-			EnvVar: "DNSP_WHITELIST",
-		},
-		cli.StringFlag{
-			Name:   "blacklist, b",
-			Usage:  "URL or path to file containing blacklisted hosts",
-			EnvVar: "DNSP_BLACKLIST",
-		},
-		cli.DurationFlag{
-			Name:   "poll, p",
-			Usage:  "poll the whitelist or blacklist for updates",
-			EnvVar: "DNSP_POLL",
-		},
-		cli.StringFlag{
-			Name:   "http, t",
-			Usage:  "start a web-based UI on the given address (host:port, host or port)",
-			EnvVar: "DNSP_HTTP",
-		},
 	}
 	app.Action = func(c *cli.Context) {
 		resolve := []string{}
@@ -69,17 +49,10 @@ func main() {
 			Net:       c.String("net"),
 			Bind:      c.String("listen"),
 			Resolve:   resolve,
-			Poll:      c.Duration("poll"),
-			Whitelist: c.String("whitelist"),
-			Blacklist: c.String("blacklist"),
 		}
 		s, err := dnsp.NewServer(*o)
 		if err != nil {
 			log.Fatalf("dnsp: %s", err)
-		}
-		if bind := c.String("http"); bind != "" {
-			log.Printf("dnsp: starting web interface on %s", bind)
-			go dnsp.RunHTTPServer(bind, s)
 		}
 
 		catch(func(sig os.Signal) int {

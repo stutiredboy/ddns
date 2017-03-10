@@ -11,9 +11,6 @@ type Options struct {
 	Net     string
 	Bind    string
 	Resolve []string
-
-	Whitelist string
-	Blacklist string
 }
 
 // validate verifies that the options are correct.
@@ -22,7 +19,7 @@ func (o *Options) validate() error {
 		o.Net = "udp"
 	}
 	if o.Net != "udp" && o.Net != "tcp" {
-		return fmt.Errorf("net: must be one of ‘tcp’, ‘udp’")
+		return fmt.Errorf("net: must be one of 'tcp', 'udp'")
 	}
 
 	if !strings.Contains(o.Bind, ":") {

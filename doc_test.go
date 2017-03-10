@@ -2,8 +2,7 @@ package dnsp_test
 
 import (
 	"log"
-
-	"github.com/gophergala/dnsp"
+	"github.com/stutiredboy/dnsp"
 )
 
 func Example() {
@@ -12,8 +11,6 @@ func Example() {
 	s, err := dnsp.NewServer(dnsp.Options{
 		Bind:    ":1053",
 		Resolve: []string{"8.8.4.4", "8.8.8.8"},
-		// Block hosts listed in a community-managed file:
-		Blacklist: "http://hosts-file.net/download/hosts.txt",
 	})
 	if err != nil {
 		log.Fatal(err)

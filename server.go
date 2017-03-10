@@ -2,7 +2,6 @@ package dnsp
 
 import (
 	"log"
-
 	"github.com/miekg/dns"
 )
 

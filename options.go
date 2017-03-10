@@ -1,27 +1,20 @@
 package ddns
 
 import (
-	"fmt"
 	"net"
 	"strings"
 )
 
 // Options can be passed to NewServer().
 type Options struct {
-	Net     string
 	Bind    string
 	Resolve []string
+	Backend string
+	PoolNum int
 }
 
 // validate verifies that the options are correct.
 func (o *Options) validate() error {
-	if o.Net == "" {
-		o.Net = "udp"
-	}
-	if o.Net != "udp" && o.Net != "tcp" {
-		return fmt.Errorf("net: must be one of 'tcp', 'udp'")
-	}
-
 	if !strings.Contains(o.Bind, ":") {
 		o.Bind += ":53"
 	}
@@ -41,6 +34,14 @@ func (o *Options) validate() error {
 			return err
 		}
 		o.Resolve[i] = addr.String()
+	}
+
+	if o.Backend == "" {
+		o.Backend = "localhost:6379"
+	}
+
+	if o.PoolNum == 0 {
+		o.PoolNum= 10
 	}
 
 	return nil

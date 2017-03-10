@@ -2,13 +2,23 @@ package ddns
 
 import (
 	"log"
+	"time"
 	"github.com/miekg/dns"
+	"github.com/mediocregopher/radix.v2/pool"
+	"github.com/mediocregopher/radix.v2/redis"
 )
 
 // Server implements a DNS server.
 type Server struct {
 	c *dns.Client
 	s *dns.Server
+	p *pool.Pool
+}
+
+// Custom redis.Client Dial, add timeout
+func DDNSDial(network, addr string) (*redis.Client, error) {
+	timeout := time.Millisecond * 50 // 50 ms
+	return redis.DialTimeout(network, addr, timeout)
 }
 
 // NewServer creates a new Server with the given options.
@@ -16,13 +26,18 @@ func NewServer(o Options) (*Server, error) {
 	if err := o.validate(); err != nil {
 		return nil, err
 	}
+	pool, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, DDNSDial)
+	if err != nil {
+		return nil, err
+	}
 
 	s := Server{
 		c: &dns.Client{},
 		s: &dns.Server{
-			Net:  o.Net,
+			Net:  "udp",
 			Addr: o.Bind,
 		},
+		p: pool,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -32,10 +47,8 @@ func NewServer(o Options) (*Server, error) {
 			return
 		}
 
-		// query *domain*
-		log.Printf("%s", r.Question[0].Name)
-		// query *client*
-		log.Printf("%s", w.RemoteAddr())
+		log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
+		s.logq2b(r.Question[0].Name, w.RemoteAddr(), s.p)
 
 		// Proxy Query:
 		for _, addr := range o.Resolve {

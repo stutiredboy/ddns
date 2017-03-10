@@ -22,22 +22,28 @@ func main() {
 	app.Author, app.Email = "", ""
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:   "net, n",
-			Value:  "udp",
-			Usage:  "listen protocol ('tcp' or 'udp')",
-			EnvVar: "DNSP_NET",
-		},
-		cli.StringFlag{
 			Name:   "listen, l",
-			Value:  ":dns",
+			Value:  "127.0.0.1:53",
 			Usage:  "listen address (host:port, host or :port)",
-			EnvVar: "DNSP_BIND",
+			EnvVar: "DDNS_BIND",
 		},
 		cli.StringFlag{
 			Name:   "resolve, r",
 			Value:  DefaultResolve,
 			Usage:  "comma-separated list of name servers (host:port or host)",
-			EnvVar: "DNSP_SERVER",
+			EnvVar: "DDNS_SERVER",
+		},
+		cli.StringFlag{
+			Name: "backend, b",
+			Value: "localhost:6379",
+			Usage: "redis backend address (host:port)",
+			EnvVar: "DDNS_BACKEND",
+		},
+		cli.IntFlag{
+			Name: "poolnum",
+			Value: 10,
+			Usage: "redis backend connection pool size (int)",
+			EnvVar: "DDNS_POOLNUM",
 		},
 	}
 	app.Action = func(c *cli.Context) {
@@ -46,9 +52,10 @@ func main() {
 			resolve = strings.Split(res, ",")
 		}
 		o := &ddns.Options{
-			Net:       c.String("net"),
 			Bind:      c.String("listen"),
 			Resolve:   resolve,
+			Backend:   c.String("backend"),
+			PoolNum:   c.Int("poolnum"),
 		}
 		s, err := ddns.NewServer(*o)
 		if err != nil {
@@ -63,10 +70,11 @@ func main() {
 		}, syscall.SIGINT, syscall.SIGTERM)
 		defer s.Shutdown() // in case of normal exit
 
+		pid := os.Getpid();
 		if len(o.Resolve) == 0 {
-			log.Printf("ddns: listening on %s", o.Bind)
+			log.Printf("ddns: listening on %s with pid %d", o.Bind, pid)
 		} else {
-			log.Printf("ddns: listening on %s, proxying to %s", o.Bind, o.Resolve)
+			log.Printf("ddns: listening on %s with pid %d, proxying to %s", o.Bind, pid, o.Resolve)
 		}
 		if err := s.ListenAndServe(); err != nil {
 			log.Fatalf("ddns: %s", err)

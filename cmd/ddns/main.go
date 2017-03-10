@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/codegangsta/cli"
-	"github.com/gophergala/dnsp"
+	"github.com/stutiredboy/ddns"
 )
 
 // DefaultResolve is the default list of nameservers for the `--resolve` flag.
@@ -16,9 +16,9 @@ var DefaultResolve = "8.8.4.4,8.8.8.8"
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "dnsp"
-	app.Usage = "DNS proxy with whitelist/blacklist support"
-	app.Version = "0.9.2"
+	app.Name = "ddns"
+	app.Usage = "DNS proxy for DNS Detect"
+	app.Version = "0.0.1"
 	app.Author, app.Email = "", ""
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -45,31 +45,31 @@ func main() {
 		if res := c.String("resolve"); res != "false" && res != "" {
 			resolve = strings.Split(res, ",")
 		}
-		o := &dnsp.Options{
+		o := &ddns.Options{
 			Net:       c.String("net"),
 			Bind:      c.String("listen"),
 			Resolve:   resolve,
 		}
-		s, err := dnsp.NewServer(*o)
+		s, err := ddns.NewServer(*o)
 		if err != nil {
-			log.Fatalf("dnsp: %s", err)
+			log.Fatalf("ddns: %s", err)
 		}
 
 		catch(func(sig os.Signal) int {
 			os.Stderr.Write([]byte{'\r'})
-			log.Printf("dnsp: shutting down")
+			log.Printf("ddns: shutting down")
 			s.Shutdown()
 			return 0
 		}, syscall.SIGINT, syscall.SIGTERM)
 		defer s.Shutdown() // in case of normal exit
 
 		if len(o.Resolve) == 0 {
-			log.Printf("dnsp: listening on %s", o.Bind)
+			log.Printf("ddns: listening on %s", o.Bind)
 		} else {
-			log.Printf("dnsp: listening on %s, proxying to %s", o.Bind, o.Resolve)
+			log.Printf("ddns: listening on %s, proxying to %s", o.Bind, o.Resolve)
 		}
 		if err := s.ListenAndServe(); err != nil {
-			log.Fatalf("dnsp: %s", err)
+			log.Fatalf("ddns: %s", err)
 		}
 	}
 	app.Run(os.Args)

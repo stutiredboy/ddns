@@ -2,7 +2,6 @@ package main
 
 import (
 	"strings"
-
 	"github.com/miekg/dns"
 )
 

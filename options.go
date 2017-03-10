@@ -1,4 +1,4 @@
-package dnsp
+package ddns
 
 import (
 	"fmt"

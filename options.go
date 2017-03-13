@@ -38,7 +38,7 @@ func (o *Options) validate() error {
 	}
 
 	if o.Backend == "" {
-		o.Backend = "localhost:6379"
+		o.Backend = "127.0.0.1:6379"
 	}
 
 	if o.PoolNum == 0 {

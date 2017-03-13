@@ -17,33 +17,29 @@ var DefaultResolve = "8.8.4.4,8.8.8.8"
 func main() {
 	app := cli.NewApp()
 	app.Name = "ddns"
-	app.Usage = "DNS proxy for DNS Detect"
+	app.Usage = "DNS proxy for [D]etect Local [DNS] Server"
 	app.Version = "0.0.1"
-	app.Author, app.Email = "", ""
+	app.Author, app.Email = "stutiredboy", "stutiredboy at gmail dot com"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "listen, l",
 			Value:  "127.0.0.1:53",
 			Usage:  "listen address (host:port, host or :port)",
-			EnvVar: "DDNS_BIND",
 		},
 		cli.StringFlag{
 			Name:   "resolve, r",
 			Value:  DefaultResolve,
 			Usage:  "comma-separated list of name servers (host:port or host)",
-			EnvVar: "DDNS_SERVER",
 		},
 		cli.StringFlag{
 			Name: "backend, b",
-			Value: "localhost:6379",
+			Value: "127.0.0.1:6379",
 			Usage: "redis backend address (host:port)",
-			EnvVar: "DDNS_BACKEND",
 		},
 		cli.IntFlag{
 			Name: "poolnum",
 			Value: 10,
 			Usage: "redis backend connection pool size (int)",
-			EnvVar: "DDNS_POOLNUM",
 		},
 		cli.BoolFlag{
 			Name: "debug, d",

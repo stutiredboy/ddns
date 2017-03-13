@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
+	"log"
 	"strings"
 	"syscall"
 
@@ -41,6 +41,11 @@ func main() {
 			Value: 10,
 			Usage: "redis backend connection pool size (int)",
 		},
+		cli.IntFlag{
+			Name: "timeout, t",
+			Value: 100,
+			Usage: "redis connection write/read timeout (int milliseconds)",
+		},
 		cli.BoolFlag{
 			Name: "debug, d",
 			Usage: "debug mode, logger verbosely",
@@ -56,7 +61,8 @@ func main() {
 			Resolve:   resolve,
 			Backend:   c.String("backend"),
 			PoolNum:   c.Int("poolnum"),
-			Debug:     c.Bool("debug"), 
+			Timeout:   c.Int("timeout"),
+			Debug:     c.Bool("debug"),
 		}
 		s, err := ddns.NewServer(*o)
 		if err != nil {

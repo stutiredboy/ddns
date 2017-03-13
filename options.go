@@ -11,6 +11,7 @@ type Options struct {
 	Resolve []string
 	Backend string
 	PoolNum int
+	Timeout int
 	Debug bool
 }
 
@@ -42,7 +43,11 @@ func (o *Options) validate() error {
 	}
 
 	if o.PoolNum == 0 {
-		o.PoolNum= 10
+		o.PoolNum = 10
+	}
+
+	if o.Timeout == 0 {
+		o.Timeout = 100
 	}
 
 	return nil

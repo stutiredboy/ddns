@@ -8,6 +8,9 @@ import (
 	"github.com/mediocregopher/radix.v2/redis"
 )
 
+// global vairable
+var RedisConnTimeout = time.Duration(0)
+
 // Server implements a DNS server.
 type Server struct {
 	c *dns.Client
@@ -17,14 +20,17 @@ type Server struct {
 
 // Custom redis.Client Dial, add timeout
 func DDNSDial(network, addr string) (*redis.Client, error) {
-	timeout := time.Millisecond * 50 // 50 ms
-	return redis.DialTimeout(network, addr, timeout)
+	return redis.DialTimeout(network, addr, RedisConnTimeout)
 }
 
 // NewServer creates a new Server with the given options.
 func NewServer(o Options) (*Server, error) {
 	if err := o.validate(); err != nil {
 		return nil, err
+	}
+	RedisConnTimeout = time.Millisecond * time.Duration(o.Timeout)
+	if o.Debug {
+		log.Printf("create redis pool with timeout: %d", RedisConnTimeout)
 	}
 	pool, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, DDNSDial)
 	if err != nil {

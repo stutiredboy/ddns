@@ -11,6 +11,7 @@ type Options struct {
 	Resolve []string
 	Backend string
 	PoolNum int
+	Debug bool
 }
 
 // validate verifies that the options are correct.

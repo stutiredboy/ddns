@@ -45,6 +45,10 @@ func main() {
 			Usage: "redis backend connection pool size (int)",
 			EnvVar: "DDNS_POOLNUM",
 		},
+		cli.BoolFlag{
+			Name: "debug, d",
+			Usage: "debug mode, logger verbosely",
+		},
 	}
 	app.Action = func(c *cli.Context) {
 		resolve := []string{}
@@ -56,6 +60,7 @@ func main() {
 			Resolve:   resolve,
 			Backend:   c.String("backend"),
 			PoolNum:   c.Int("poolnum"),
+			Debug:     c.Bool("debug"), 
 		}
 		s, err := ddns.NewServer(*o)
 		if err != nil {

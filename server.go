@@ -47,7 +47,9 @@ func NewServer(o Options) (*Server, error) {
 			return
 		}
 
-		log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
+		if o.Debug {
+			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
+		}
 		s.logq2b(r.Question[0].Name, w.RemoteAddr(), s.p)
 
 		// Proxy Query:

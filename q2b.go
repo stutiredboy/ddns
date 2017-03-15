@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 	"strings"
-	"github.com/mediocregopher/radix.v2/pool"
+	"github.com/stutiredboy/radix.v2/pool"
 )
 
 func (s *Server) logq2b(name string, addr net.Addr, pool *pool.Pool) error {

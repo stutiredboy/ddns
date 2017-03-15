@@ -4,8 +4,8 @@ import (
 	"log"
 	"time"
 	"github.com/miekg/dns"
-	"github.com/mediocregopher/radix.v2/pool"
-	"github.com/mediocregopher/radix.v2/redis"
+	"github.com/stutiredboy/radix.v2/pool"
+	"github.com/stutiredboy/radix.v2/redis"
 )
 
 // global vairable
@@ -18,21 +18,17 @@ type Server struct {
 	p *pool.Pool
 }
 
-// Custom redis.Client Dial, add timeout
-func DDNSDial(network, addr string) (*redis.Client, error) {
-	return redis.DialTimeout(network, addr, RedisConnTimeout)
-}
-
 // NewServer creates a new Server with the given options.
 func NewServer(o Options) (*Server, error) {
 	if err := o.validate(); err != nil {
 		return nil, err
 	}
-	RedisConnTimeout = time.Millisecond * time.Duration(o.Timeout)
+	connect_timeout := time.Millisecond * time.Duration(o.ConnectTimeout)
+	read_timeout := time.Millisecond * time.Duration(o.ReadTimeout)
 	if o.Debug {
-		log.Printf("create redis pool with timeout: %d", RedisConnTimeout)
+		log.Printf("create redis pool with connect_timeout: %s, read_timeout: %s", connect_timeout, read_timeout)
 	}
-	pool, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, DDNSDial)
+	pool, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, connect_timeout, read_timeout, redis.DialTimeout)
 	if err != nil {
 		return nil, err
 	}

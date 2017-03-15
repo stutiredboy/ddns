@@ -42,7 +42,12 @@ func main() {
 			Usage: "redis backend connection pool size (int)",
 		},
 		cli.IntFlag{
-			Name: "timeout, t",
+			Name: "connect-timeout",
+			Value: 1000,
+			Usage: "redis connection create timeout (int milliseconds)",
+		},
+		cli.IntFlag{
+			Name: "read-timeout",
 			Value: 100,
 			Usage: "redis connection write/read timeout (int milliseconds)",
 		},
@@ -61,7 +66,8 @@ func main() {
 			Resolve:   resolve,
 			Backend:   c.String("backend"),
 			PoolNum:   c.Int("poolnum"),
-			Timeout:   c.Int("timeout"),
+			ConnectTimeout:   c.Int("connect-timeout"),
+			ReadTimeout:   c.Int("read-timeout"),
 			Debug:     c.Bool("debug"),
 		}
 		s, err := ddns.NewServer(*o)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"log"
+	"time"
 	"strings"
 	"syscall"
 
@@ -30,6 +31,12 @@ func main() {
 			Name:   "resolve, r",
 			Value:  DefaultResolve,
 			Usage:  "comma-separated list of name servers (host:port or host)",
+		},
+		// period for dump useful information, such as total query and qps
+		cli.IntFlag{
+			Name: "period",
+			Value: 60,
+			Usage: "time to dump qps (int seconds)",
 		},
 		cli.StringFlag{
 			Name: "backend, b",
@@ -77,10 +84,14 @@ func main() {
 
 		catch(func(sig os.Signal) int {
 			os.Stderr.Write([]byte{'\r'})
-			log.Printf("ddns: shutting down")
+			log.Printf("ddns: shutting down by signal <%s>", sig)
 			s.Shutdown()
 			return 0
 		}, syscall.SIGINT, syscall.SIGTERM)
+
+		// log query counter periodically
+		run_periodically(s.Dump, c.Int("period"))
+
 		defer s.Shutdown() // in case of normal exit
 
 		pid := os.Getpid();
@@ -104,5 +115,22 @@ func catch(handler func(os.Signal) int, signals ...os.Signal) {
 	}
 	go func() {
 		os.Exit(handler(<-c))
+	}()
+}
+
+// do something periodically
+func run_periodically(handler func(int), period int) {
+	ticker := time.NewTicker(time.Duration(period) * time.Second)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+				case <- ticker.C:
+					handler(period)
+				case <- quit:
+					ticker.Stop()
+					return
+			}
+		}
 	}()
 }

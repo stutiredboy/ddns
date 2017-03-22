@@ -16,6 +16,10 @@ type Server struct {
 	c *dns.Client
 	s *dns.Server
 	p *pool.Pool
+	/* current queries counter */
+	n int64
+	/* last queries counter for qps */
+	l int64
 }
 
 // NewServer creates a new Server with the given options.
@@ -40,6 +44,8 @@ func NewServer(o Options) (*Server, error) {
 			Addr: o.Bind,
 		},
 		p: pool,
+		n: 0,
+		l: 0,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -53,6 +59,8 @@ func NewServer(o Options) (*Server, error) {
 			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
 		}
 		s.logq2b(r.Question[0].Name, w.RemoteAddr(), s.p)
+		// increase queries counter
+		s.n += 1
 
 		// Proxy Query:
 		for _, addr := range o.Resolve {

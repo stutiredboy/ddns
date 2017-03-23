@@ -85,3 +85,9 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) Shutdown() error {
 	return s.s.Shutdown()
 }
+
+func (s *Server) Dump(period int) {
+        qps := (s.n - s.l) / int64(period)
+        log.Printf("total queries: %d, qps: %d", s.n, qps)
+        s.l = s.n
+}

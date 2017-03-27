@@ -2,14 +2,13 @@ package ddns
 
 import (
 	"log"
+	"net"
 	"time"
+	"strings"
 	"github.com/miekg/dns"
 	"github.com/stutiredboy/radix.v2/pool"
 	"github.com/stutiredboy/radix.v2/redis"
 )
-
-// global vairable
-var RedisConnTimeout = time.Duration(0)
 
 // Server implements a DNS server.
 type Server struct {
@@ -32,7 +31,7 @@ func NewServer(o Options) (*Server, error) {
 	if o.Debug {
 		log.Printf("create redis pool with connect_timeout: %s, read_timeout: %s", connect_timeout, read_timeout)
 	}
-	pool, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, connect_timeout, read_timeout, redis.DialTimeout)
+	p, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, connect_timeout, read_timeout, redis.DialTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +42,7 @@ func NewServer(o Options) (*Server, error) {
 			Net:  "udp",
 			Addr: o.Bind,
 		},
-		p: pool,
+		p: p,
 		n: 0,
 		l: 0,
 	}
@@ -58,7 +57,7 @@ func NewServer(o Options) (*Server, error) {
 		if o.Debug {
 			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
 		}
-		s.logq2b(r.Question[0].Name, w.RemoteAddr(), s.p)
+		s.logq2b(r.Question[0].Name, w.RemoteAddr())
 		// increase queries counter
 		s.n += 1
 
@@ -90,4 +89,17 @@ func (s *Server) Dump(period int) {
         qps := (s.n - s.l) / int64(period)
         log.Printf("total queries: %d, qps: %d", s.n, qps)
         s.l = s.n
+}
+
+func (s *Server) logq2b(name string, addr net.Addr) error {
+	name = strings.TrimSuffix(name, ".")
+	clientip, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return err
+	}
+	err = s.p.Cmd("SETEX", name, 120, clientip).Err
+	if err != nil {
+		log.Printf("setex %s as %s raise err: %s", name, clientip, err)
+	}
+	return err
 }

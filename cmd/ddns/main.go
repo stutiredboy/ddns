@@ -39,6 +39,10 @@ func main() {
 			Usage: "time to dump qps (int seconds)",
 		},
 		cli.StringFlag{
+			Name:   "statsfile",
+			Usage:  "periodically save mem to statsfile, need abs path",
+		},
+		cli.StringFlag{
 			Name: "backend, b",
 			Value: "127.0.0.1:6379",
 			Usage: "redis backend address (host:port)",
@@ -90,7 +94,7 @@ func main() {
 		}, syscall.SIGINT, syscall.SIGTERM)
 
 		// log query counter periodically
-		run_periodically(s.Dump, c.Int("period"))
+		run_periodically(s.Dump, c.Int("period"), c.String("statsfile"))
 
 		defer s.Shutdown() // in case of normal exit
 
@@ -119,14 +123,14 @@ func catch(handler func(os.Signal) int, signals ...os.Signal) {
 }
 
 // do something periodically
-func run_periodically(handler func(int), period int) {
+func run_periodically(handler func(int, string), period int, saveto string) {
 	ticker := time.NewTicker(time.Duration(period) * time.Second)
 	quit := make(chan struct{})
 	go func() {
 		for {
 			select {
 				case <- ticker.C:
-					handler(period)
+					handler(period, saveto)
 				case <- quit:
 					ticker.Stop()
 					return

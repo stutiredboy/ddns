@@ -3,8 +3,10 @@ package ddns
 import (
 	"log"
 	"net"
+	"fmt"
 	"time"
 	"strings"
+	"io/ioutil"
 	"github.com/miekg/dns"
 	"github.com/stutiredboy/radix.v2/pool"
 	"github.com/stutiredboy/radix.v2/redis"
@@ -85,9 +87,15 @@ func (s *Server) Shutdown() error {
 	return s.s.Shutdown()
 }
 
-func (s *Server) Dump(period int) {
+func (s *Server) Dump(period int, saveto string) {
         qps := (s.n - s.l) / int64(period)
         log.Printf("total queries: %d, qps: %d", s.n, qps)
+	if saveto != "" {
+		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\n", s.n)), 644)
+		if err != nil {
+			log.Printf("dump statistics to %s err: %s", saveto, err)
+		}
+	}
         s.l = s.n
 }
 

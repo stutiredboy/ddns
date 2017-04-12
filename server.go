@@ -2,15 +2,28 @@ package ddns
 
 import (
 	"log"
+	"log/syslog"
 	"net"
 	"fmt"
 	"time"
 	"strings"
 	"io/ioutil"
+	"hash/fnv"
 	"github.com/miekg/dns"
 	"github.com/stutiredboy/radix.v2/pool"
 	"github.com/stutiredboy/radix.v2/redis"
 )
+
+func hash(s string) uint32 {
+        h := fnv.New32a()
+        h.Write([]byte(s))
+        return h.Sum32()
+}
+
+type qinfo struct {
+	name string
+	addr net.Addr
+}
 
 // Server implements a DNS server.
 type Server struct {
@@ -21,6 +34,8 @@ type Server struct {
 	n int64
 	/* last queries counter for qps */
 	l int64
+	sysLog *syslog.Writer
+	log_chan map[int]chan qinfo
 }
 
 // NewServer creates a new Server with the given options.
@@ -37,6 +52,18 @@ func NewServer(o Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	/* log_chan initial begin */
+	log_chan := make(map[int]chan qinfo)
+
+	for i := 0; i < o.ChanNum ; i++ {
+		log_chan[i] = make(chan qinfo, 10)
+	}
+	/* log_chan initial finish */
+
+	sysLog, err := syslog.Dial("unixgram", "/dev/log", syslog.LOG_DEBUG|syslog.LOG_LOCAL5, "ddns")
+	if err != nil {
+		return nil, err
+	}
 
 	s := Server{
 		c: &dns.Client{},
@@ -47,6 +74,9 @@ func NewServer(o Options) (*Server, error) {
 		p: p,
 		n: 0,
 		l: 0,
+		sysLog: sysLog,
+		//log_chan: make(chan qinfo, 5),
+		log_chan: log_chan,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -59,7 +89,13 @@ func NewServer(o Options) (*Server, error) {
 		if o.Debug {
 			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
 		}
-		s.logq2b(r.Question[0].Name, w.RemoteAddr())
+		// send query info to channel
+		chan_index := int(hash(r.Question[0].Name)) % o.ChanNum
+		select {
+			case s.log_chan[chan_index] <- qinfo{r.Question[0].Name, w.RemoteAddr()}:
+			default:
+				log.Printf("receive query %s %s, but channel %d full", r.Question[0].Name, w.RemoteAddr(), chan_index)
+		}
 		// increase queries counter
 		s.n += 1
 
@@ -105,9 +141,18 @@ func (s *Server) logq2b(name string, addr net.Addr) error {
 	if err != nil {
 		return err
 	}
+	s.sysLog.Debug(fmt.Sprintf("query %s from %s", name, clientip))
 	err = s.p.Cmd("SETEX", name, 120, clientip).Err
-	if err != nil {
-		log.Printf("setex %s as %s raise err: %s", name, clientip, err)
-	}
 	return err
+}
+
+func (s *Server) Log2b(chan_index int) {
+	log.Printf("listening to channel %d" , chan_index)
+	for {
+		query := <- s.log_chan[chan_index]
+		err := s.logq2b(query.name, query.addr)
+		if err != nil {
+			log.Printf("channel %d logq2b %s %s raise err: %s", chan_index, query.name, query.addr, err)
+		}
+	}
 }

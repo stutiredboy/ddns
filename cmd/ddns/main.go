@@ -72,11 +72,22 @@ func main() {
 		if res := c.String("resolve"); res != "false" && res != "" {
 			resolve = strings.Split(res, ",")
 		}
+		poolnum := c.Int("poolnum")
+		if poolnum == 0 {
+			poolnum = 10
+		}
+		channum := 0
+		if poolnum > 2 {
+			channum = poolnum / 2
+		} else {
+			channum = poolnum
+		}
 		o := &ddns.Options{
 			Bind:      c.String("listen"),
 			Resolve:   resolve,
 			Backend:   c.String("backend"),
-			PoolNum:   c.Int("poolnum"),
+			PoolNum:   poolnum,
+			ChanNum:   channum,
 			ConnectTimeout:   c.Int("connect-timeout"),
 			ReadTimeout:   c.Int("read-timeout"),
 			Debug:     c.Bool("debug"),
@@ -95,6 +106,7 @@ func main() {
 
 		// log query counter periodically
 		run_periodically(s.Dump, c.Int("period"), c.String("statsfile"))
+		log2b(s.Log2b, channum)
 
 		defer s.Shutdown() // in case of normal exit
 
@@ -120,6 +132,14 @@ func catch(handler func(os.Signal) int, signals ...os.Signal) {
 	go func() {
 		os.Exit(handler(<-c))
 	}()
+}
+
+func log2b(handler func(int), channum int) {
+	for i := 0 ; i < channum ; i++ {
+		go func(i int) {
+			handler(i)
+		}(i)
+	}
 }
 
 // do something periodically

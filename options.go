@@ -11,6 +11,7 @@ type Options struct {
 	Resolve []string
 	Backend string
 	PoolNum int
+	ChanNum int
 	ConnectTimeout int
 	ReadTimeout int
 	Debug bool
@@ -41,10 +42,6 @@ func (o *Options) validate() error {
 
 	if o.Backend == "" {
 		o.Backend = "127.0.0.1:6379"
-	}
-
-	if o.PoolNum == 0 {
-		o.PoolNum = 10
 	}
 
 	if o.ConnectTimeout == 0 {

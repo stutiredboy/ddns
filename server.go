@@ -8,17 +8,10 @@ import (
 	"time"
 	"strings"
 	"io/ioutil"
-	"hash/fnv"
 	"github.com/miekg/dns"
 	"github.com/stutiredboy/radix.v2/pool"
 	"github.com/stutiredboy/radix.v2/redis"
 )
-
-func hash(s string) uint32 {
-        h := fnv.New32a()
-        h.Write([]byte(s))
-        return h.Sum32()
-}
 
 type qinfo struct {
 	name string
@@ -34,6 +27,8 @@ type Server struct {
 	n int64
 	/* last queries counter for qps */
 	l int64
+	/* log failed counter */
+	f int64
 	sysLog *syslog.Writer
 	log_chan map[int]chan qinfo
 }
@@ -74,6 +69,7 @@ func NewServer(o Options) (*Server, error) {
 		p: p,
 		n: 0,
 		l: 0,
+		f: 0,
 		sysLog: sysLog,
 		//log_chan: make(chan qinfo, 5),
 		log_chan: log_chan,
@@ -94,6 +90,7 @@ func NewServer(o Options) (*Server, error) {
 		select {
 			case s.log_chan[chan_index] <- qinfo{r.Question[0].Name, w.RemoteAddr()}:
 			default:
+				s.f += 1
 				log.Printf("receive query %s %s, but channel %d full", r.Question[0].Name, w.RemoteAddr(), chan_index)
 		}
 		// increase queries counter
@@ -125,7 +122,7 @@ func (s *Server) Shutdown() error {
 
 func (s *Server) Dump(period int, saveto string) {
         qps := (s.n - s.l) / int64(period)
-        log.Printf("total queries: %d, qps: %d", s.n, qps)
+        log.Printf("total queries: %d, qps: %d, log failed: %d", s.n, qps, s.f)
 	if saveto != "" {
 		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\n", s.n)), 644)
 		if err != nil {
@@ -135,7 +132,7 @@ func (s *Server) Dump(period int, saveto string) {
         s.l = s.n
 }
 
-func (s *Server) logq2b(name string, addr net.Addr) error {
+func (s *Server) log2b(name string, addr net.Addr) error {
 	name = strings.TrimSuffix(name, ".")
 	clientip, _, err := net.SplitHostPort(addr.String())
 	if err != nil {
@@ -150,9 +147,9 @@ func (s *Server) Log2b(chan_index int) {
 	log.Printf("listening to channel %d" , chan_index)
 	for {
 		query := <- s.log_chan[chan_index]
-		err := s.logq2b(query.name, query.addr)
+		err := s.log2b(query.name, query.addr)
 		if err != nil {
-			log.Printf("channel %d logq2b %s %s raise err: %s", chan_index, query.name, query.addr, err)
+			log.Printf("channel %d log2b %s %s raise err: %s", chan_index, query.name, query.addr, err)
 		}
 	}
 }

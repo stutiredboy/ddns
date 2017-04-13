@@ -77,8 +77,13 @@ func main() {
 			poolnum = 10
 		}
 		channum := 0
+		// make sure poolnum > channum, and have spare connections
 		if poolnum > 2 {
-			channum = poolnum / 2
+			if poolnum > 10 {
+				channum = poolnum - 5
+			} else {
+				channum = poolnum / 2
+			}
 		} else {
 			channum = poolnum
 		}

@@ -86,7 +86,7 @@ func NewServer(o Options) (*Server, error) {
 			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
 		}
 		// send query info to channel
-		chan_index := int(hash(r.Question[0].Name)) % o.ChanNum
+		chan_index := name_hash(r.Question[0].Name) % o.ChanNum
 		select {
 			case s.log_chan[chan_index] <- qinfo{r.Question[0].Name, w.RemoteAddr()}:
 			default:

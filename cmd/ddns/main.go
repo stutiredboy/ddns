@@ -139,6 +139,7 @@ func catch(handler func(os.Signal) int, signals ...os.Signal) {
 	}()
 }
 
+// log query to backend
 func log2b(handler func(int), channum int) {
 	for i := 0 ; i < channum ; i++ {
 		go func(i int) {

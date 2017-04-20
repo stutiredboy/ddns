@@ -22,7 +22,7 @@ type qinfo struct {
 type Server struct {
 	c *dns.Client
 	s *dns.Server
-	p *pool.Pool
+	pools map[int]*pool.Pool
 	/* current queries counter */
 	n int64
 	/* last queries counter for qps */
@@ -30,30 +30,34 @@ type Server struct {
 	/* log failed counter */
 	f int64
 	sysLog *syslog.Writer
-	log_chan map[int]chan qinfo
+	logChan map[int]map[int]chan qinfo
+	lenBackends int
 }
 
 // NewServer creates a new Server with the given options.
-func NewServer(o Options) (*Server, error) {
-	if err := o.validate(); err != nil {
+func NewServer(c Configurations) (*Server, error) {
+	if err := c.validate(); err != nil {
 		return nil, err
 	}
-	connect_timeout := time.Millisecond * time.Duration(o.ConnectTimeout)
-	read_timeout := time.Millisecond * time.Duration(o.ReadTimeout)
-	if o.Debug {
-		log.Printf("create redis pool with connect_timeout: %s, read_timeout: %s", connect_timeout, read_timeout)
+	connectTimeout := time.Millisecond * time.Duration(c.ConnectTimeout)
+	readTimeout := time.Millisecond * time.Duration(c.ReadTimeout)
+	if c.Debug {
+		log.Printf("create redis pool with connectTimeout: %s, readTimeout: %s", connectTimeout, readTimeout)
 	}
-	p, err := pool.NewCustom("tcp", o.Backend, o.PoolNum, connect_timeout, read_timeout, redis.DialTimeout)
-	if err != nil {
-		return nil, err
+	pools := make(map[int]*pool.Pool)
+	logChan := make(map[int]map[int]chan qinfo)
+	for index, backend := range c.Backends {
+		p, err := pool.NewCustom("tcp", backend, c.PoolNum, connectTimeout, readTimeout, redis.DialTimeout)
+		if err != nil {
+			return nil, err
+		}
+		pools[index] = p
+		_logChan := make(map[int]chan qinfo)
+		for i := 0; i < c.ChanNum ; i++ {
+			_logChan[i] = make(chan qinfo, 10)
+		}
+		logChan[index] = _logChan
 	}
-	/* log_chan initial begin */
-	log_chan := make(map[int]chan qinfo)
-
-	for i := 0; i < o.ChanNum ; i++ {
-		log_chan[i] = make(chan qinfo, 10)
-	}
-	/* log_chan initial finish */
 
 	sysLog, err := syslog.Dial("unixgram", "/dev/log", syslog.LOG_DEBUG|syslog.LOG_LOCAL5, "ddns")
 	if err != nil {
@@ -64,40 +68,43 @@ func NewServer(o Options) (*Server, error) {
 		c: &dns.Client{},
 		s: &dns.Server{
 			Net:  "udp",
-			Addr: o.Bind,
+			Addr: c.Listen,
 		},
-		p: p,
+		pools: pools,
 		n: 0,
 		l: 0,
 		f: 0,
 		sysLog: sysLog,
-		//log_chan: make(chan qinfo, 5),
-		log_chan: log_chan,
+		logChan: logChan,
+		lenBackends: len(c.Backends),
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		// If no upstream proxy is present, drop the query:
-		if len(o.Resolve) == 0 {
+		if len(c.NameServers) == 0 {
 			dns.HandleFailed(w, r)
 			return
 		}
 
-		if o.Debug {
+		if c.Debug {
 			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
 		}
 		// send query info to channel
-		chan_index := name_hash(r.Question[0].Name) % o.ChanNum
+		name := strings.ToLower(strings.TrimSuffix(r.Question[0].Name, "."))
+		// Backend and Channel must use different hash method
+		backendIndex := backendHash(name) % s.lenBackends
+		chanIndex := channelHash(name) % c.ChanNum
 		select {
-			case s.log_chan[chan_index] <- qinfo{r.Question[0].Name, w.RemoteAddr()}:
+			case s.logChan[backendIndex][chanIndex] <- qinfo{name, w.RemoteAddr()}:
 			default:
-				s.f += 1
-				log.Printf("receive query %s %s, but channel %d full", r.Question[0].Name, w.RemoteAddr(), chan_index)
+				s.f++
+				log.Printf("receive query %s %s, but backend %d channel%d full", r.Question[0].Name, w.RemoteAddr(), backendIndex, chanIndex)
 		}
 		// increase queries counter
-		s.n += 1
+		s.n++
 
 		// Proxy Query:
-		for _, addr := range o.Resolve {
+		for _, addr := range c.NameServers {
 			in, _, err := s.c.Exchange(r, addr)
 			if err != nil {
 				continue
@@ -120,6 +127,7 @@ func (s *Server) Shutdown() error {
 	return s.s.Shutdown()
 }
 
+// Dump the stats of ddns
 func (s *Server) Dump(period int, saveto string) {
         qps := (s.n - s.l) / int64(period)
         log.Printf("total queries: %d, qps: %d, log failed: %d", s.n, qps, s.f)
@@ -132,24 +140,26 @@ func (s *Server) Dump(period int, saveto string) {
         s.l = s.n
 }
 
-func (s *Server) log2b(name string, addr net.Addr) error {
-	name = strings.TrimSuffix(name, ".")
+func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {
+	// trimsuffix and lowercase
+	// name = strings.ToLower(strings.TrimSuffix(name, "."))
 	clientip, _, err := net.SplitHostPort(addr.String())
 	if err != nil {
 		return err
 	}
 	s.sysLog.Debug(fmt.Sprintf("query %s from %s", name, clientip))
-	err = s.p.Cmd("SETEX", name, 120, clientip).Err
+	err = s.pools[backendIndex].Cmd("SETEX", name, 120, clientip).Err
 	return err
 }
 
-func (s *Server) Log2b(chan_index int) {
-	log.Printf("listening to channel %d" , chan_index)
+// Log2b log quureies to backend by different channel/backend
+func (s *Server) Log2b(backendIndex int, chanIndex int) {
+	log.Printf("listening to backend %d channel %d" , backendIndex, chanIndex)
 	for {
-		query := <- s.log_chan[chan_index]
-		err := s.log2b(query.name, query.addr)
+		query := <- s.logChan[backendIndex][chanIndex]
+		err := s.log2b(query.name, query.addr, backendIndex)
 		if err != nil {
-			log.Printf("channel %d log2b %s %s raise err: %s", chan_index, query.name, query.addr, err)
+			log.Printf("backend %d channel %d log2b %s %s raise err: %s", backendIndex, chanIndex, query.name, query.addr, err)
 		}
 	}
 }

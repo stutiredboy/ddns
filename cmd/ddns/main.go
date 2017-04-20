@@ -5,99 +5,40 @@ import (
 	"os/signal"
 	"log"
 	"time"
-	"strings"
+	"encoding/json"
 	"syscall"
+	"io/ioutil"
 
 	"github.com/codegangsta/cli"
 	"github.com/stutiredboy/ddns"
 )
 
-// DefaultResolve is the default list of nameservers for the `--resolve` flag.
-var DefaultResolve = "8.8.4.4,8.8.8.8"
-
 func main() {
 	app := cli.NewApp()
 	app.Name = "ddns"
 	app.Usage = "DNS proxy for [D]etect Local [DNS] Server"
-	app.Version = "0.0.1"
+	app.Version = "0.0.3"
 	app.Author, app.Email = "stutiredboy", "stutiredboy at gmail dot com"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:   "listen, l",
-			Value:  "127.0.0.1:53",
-			Usage:  "listen address (host:port, host or :port)",
-		},
-		cli.StringFlag{
-			Name:   "resolve, r",
-			Value:  DefaultResolve,
-			Usage:  "comma-separated list of name servers (host:port or host)",
-		},
-		// period for dump useful information, such as total query and qps
-		cli.IntFlag{
-			Name: "period",
-			Value: 60,
-			Usage: "time to dump qps (int seconds)",
-		},
-		cli.StringFlag{
-			Name:   "statsfile",
-			Usage:  "periodically save mem to statsfile, need abs path",
-		},
-		cli.StringFlag{
-			Name: "backend, b",
-			Value: "127.0.0.1:6379",
-			Usage: "redis backend address (host:port)",
-		},
-		cli.IntFlag{
-			Name: "poolnum",
-			Value: 10,
-			Usage: "redis backend connection pool size (int)",
-		},
-		cli.IntFlag{
-			Name: "connect-timeout",
-			Value: 1000,
-			Usage: "redis connection create timeout (int milliseconds)",
-		},
-		cli.IntFlag{
-			Name: "read-timeout",
-			Value: 100,
-			Usage: "redis connection write/read timeout (int milliseconds)",
-		},
-		cli.BoolFlag{
-			Name: "debug, d",
-			Usage: "debug mode, logger verbosely",
+			Name:   "config, c",
+			Usage:  "Load configuration from `FILE`",
 		},
 	}
 	app.Action = func(c *cli.Context) {
-		resolve := []string{}
-		if res := c.String("resolve"); res != "false" && res != "" {
-			resolve = strings.Split(res, ",")
+		if c.String("config") == "" {
+			log.Fatalf("ddns: config option is needed, read help first.")
 		}
-		poolnum := c.Int("poolnum")
-		if poolnum == 0 {
-			poolnum = 10
+		config, err := ioutil.ReadFile(c.String("config"))
+		if err != nil {
+			log.Fatalf("File error: %v\n", err)
 		}
-		channum := 0
-		// make sure poolnum > channum, and have spare connections
-		if poolnum > 2 {
-			if poolnum > 10 {
-				channum = poolnum - 5
-			} else {
-				channum = poolnum / 2
-			}
-		} else {
-			channum = poolnum
+		var conf ddns.Configurations
+		err = json.Unmarshal(config, &conf)
+		if err != nil {
+			log.Fatalf("Unmarshal error: %v\n", err)
 		}
-		o := &ddns.Options{
-			Bind:      c.String("listen"),
-			Resolve:   resolve,
-			Backend:   c.String("backend"),
-			PoolNum:   poolnum,
-			ChanNum:   channum,
-			ConnectTimeout:   c.Int("connect-timeout"),
-			ReadTimeout:   c.Int("read-timeout"),
-			Debug:     c.Bool("debug"),
-		}
-		s, err := ddns.NewServer(*o)
+		s, err := ddns.NewServer(conf)
 		if err != nil {
 			log.Fatalf("ddns: %s", err)
 		}
@@ -110,17 +51,13 @@ func main() {
 		}, syscall.SIGINT, syscall.SIGTERM)
 
 		// log query counter periodically
-		run_periodically(s.Dump, c.Int("period"), c.String("statsfile"))
-		log2b(s.Log2b, channum)
+		runPeriodically(s.Dump, conf.StatsPeriod, conf.StatsFile)
+		log2b(s.Log2b, len(conf.Backends), conf.ChanNum)
 
 		defer s.Shutdown() // in case of normal exit
 
 		pid := os.Getpid();
-		if len(o.Resolve) == 0 {
-			log.Printf("ddns: listening on %s with pid %d", o.Bind, pid)
-		} else {
-			log.Printf("ddns: listening on %s with pid %d, proxying to %s", o.Bind, pid, o.Resolve)
-		}
+		log.Printf("ddns: listening on %s with pid %d, proxying to %s", conf.Listen, pid, conf.NameServers)
 		if err := s.ListenAndServe(); err != nil {
 			log.Fatalf("ddns: %s", err)
 		}
@@ -140,16 +77,18 @@ func catch(handler func(os.Signal) int, signals ...os.Signal) {
 }
 
 // log query to backend
-func log2b(handler func(int), channum int) {
-	for i := 0 ; i < channum ; i++ {
-		go func(i int) {
-			handler(i)
-		}(i)
+func log2b(handler func(int, int), backendnum int, channum int) {
+	for i :=0 ; i < backendnum ; i++ {
+		for j := 0 ; j < channum ; j++ {
+			go func(i int, j int) {
+				handler(i, j)
+			}(i, j)
+		}
 	}
 }
 
 // do something periodically
-func run_periodically(handler func(int, string), period int, saveto string) {
+func runPeriodically(handler func(int, string), period int, saveto string) {
 	ticker := time.NewTicker(time.Duration(period) * time.Second)
 	quit := make(chan struct{})
 	go func() {

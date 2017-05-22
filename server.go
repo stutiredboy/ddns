@@ -124,7 +124,7 @@ func (s *Server) Dump(period int, saveto string) {
         qps := (s.n - s.l) / int64(period)
         log.Printf("total queries: %d, qps: %d, log failed: %d", s.n, qps, s.f)
 	if saveto != "" {
-		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\n", s.n)), 644)
+		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\nlog failed: %d\n", s.n, s.f)), 644)
 		if err != nil {
 			log.Printf("dump statistics to %s err: %s", saveto, err)
 		}

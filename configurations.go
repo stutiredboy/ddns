@@ -18,7 +18,7 @@ type Configurations struct {
     Backends map[int]string
     // backend connection pool numbers
     PoolNum int
-    // channel numbers, must little than PoolNum * len(Backends)
+    // channel numbers, must little than PoolNum
     ChanNum int
     // millseconds
     ConnectTimeout int

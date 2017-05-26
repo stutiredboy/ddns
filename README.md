@@ -31,7 +31,7 @@ Forked from: https://github.com/gophergala/dnsp
 Configuration | Description
 ------ | ------
 NameServers | name servers the DNS query forward to, format: address:port, default port is 53
-Listen | UDP Listen address:port
+Listen | UDP Listen *address:port*, default: *0.0.0.0:53*
 StatsFile | stats file, absolute path
 StatsPeriod | ddns dump stats periodically(seconds)
 Backends | redis server, ddns will log to backend by *Backends[crc32(domain)%len(Backends)]*

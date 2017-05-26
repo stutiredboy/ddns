@@ -34,7 +34,7 @@ NameServers | name servers the DNS query forward to, format: address:port, defau
 Listen | UDP Listen address:port
 StatsFile | stats file, absolute path
 StatsPeriod | ddns dump stats periodically(seconds)
-Backends | redis server
+Backends | redis server, ddns will log to backend by *Backends[crc32(domain)%len(Backends)]*
 ConnectTimeout | timeout for connecting to redis server, Millisecond
 ReadTimeout | timeout for read/write to redis server, Millisecond
 ChanNum | concurrency numbers for writing to redis

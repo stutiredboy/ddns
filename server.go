@@ -24,11 +24,15 @@ type Server struct {
 	s *dns.Server
 	pools map[int]*pool.Pool
 	/* current queries counter */
-	n int64
+	currQueries int64
 	/* last queries counter for qps */
-	l int64
-	/* log failed counter */
-	f int64
+	lastQueries int64
+	/* current failed counter */
+	currFailed int64
+	/* last failed counter */
+	lastFailed int64
+	/* failedRate */
+	failedRate float64
 	sysLog *syslog.Writer
 	logChan map[int]map[int]chan qinfo
 	lenBackends int
@@ -71,9 +75,11 @@ func NewServer(c Configurations) (*Server, error) {
 			Addr: c.Listen,
 		},
 		pools: pools,
-		n: 0,
-		l: 0,
-		f: 0,
+		currQueries: 0,
+		lastQueries: 0,
+		currFailed: 0,
+		lastFailed: 0,
+		failedRate: 0.0,
 		sysLog: sysLog,
 		logChan: logChan,
 		lenBackends: len(c.Backends),
@@ -97,11 +103,11 @@ func NewServer(c Configurations) (*Server, error) {
 		select {
 			case s.logChan[backendIndex][chanIndex] <- qinfo{name, w.RemoteAddr()}:
 			default:
-				s.f++
+				s.currFailed++
 				log.Printf("receive query %s %s, but backend %d channel%d full", r.Question[0].Name, w.RemoteAddr(), backendIndex, chanIndex)
 		}
 		// increase queries counter
-		s.n++
+		s.currQueries++
 
 		// Proxy Query:
 		for _, addr := range c.NameServers {
@@ -129,15 +135,18 @@ func (s *Server) Shutdown() error {
 
 // Dump the stats of ddns
 func (s *Server) Dump(period int, saveto string) {
-        qps := (s.n - s.l) / int64(period)
-        log.Printf("total queries: %d, qps: %d, log failed: %d", s.n, qps, s.f)
+        qps := (s.currQueries - s.lastQueries) / int64(period)
+	if qps > 0 {
+		s.failedRate = float64(s.currFailed - s.lastFailed) / float64(s.currQueries - s.lastQueries)
+	}
+        log.Printf("total queries: %d, qps: %d, log failed: %d, failed rate: %f", s.currQueries, qps, s.currFailed, s.failedRate)
 	if saveto != "" {
-		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\nlog failed: %d\n", s.n, s.f)), 644)
+		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\nlog failed: %d\nfailed rate: %f", s.currQueries, s.currFailed, s.failedRate)), 644)
 		if err != nil {
 			log.Printf("dump statistics to %s err: %s", saveto, err)
 		}
 	}
-        s.l = s.n
+	s.lastQueries = s.currQueries
 }
 
 func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {

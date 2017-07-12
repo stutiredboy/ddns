@@ -147,6 +147,7 @@ func (s *Server) Dump(period int, saveto string) {
 		}
 	}
 	s.lastQueries = s.currQueries
+	s.lastFailed = s.currFailed
 }
 
 func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {

@@ -51,7 +51,7 @@ func (c *Configurations) validate() error {
 	/* ensure have full coverage index */
 	for i := 0 ; i < len(c.Backends) ; i++ {
 		_, ok := c.Backends[i]
-		if ok == false {
+		if !ok {
 			err := errors.New("Wrong backends hash set, hash should full converage [0, len_of_Backends)")
 			return err
 		}

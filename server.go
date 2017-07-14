@@ -93,7 +93,8 @@ func NewServer(c Configurations) (*Server, error) {
 		}
 
 		if c.Debug {
-			log.Printf("query %s from %s", r.Question[0].Name, w.RemoteAddr())
+			ecs := GetEdns0Subnet(r)
+			log.Printf("query %s from %s ecs %s", r.Question[0].Name, w.RemoteAddr(), ecs.String())
 		}
 		// send query info to channel
 		name := strings.ToLower(strings.TrimSuffix(r.Question[0].Name, "."))
@@ -172,4 +173,19 @@ func (s *Server) Log2b(backendIndex int, chanIndex int) {
 			log.Printf("backend %d channel %d log2b %s %s raise err: %s", backendIndex, chanIndex, query.name, query.addr, err)
 		}
 	}
+}
+
+// GetEdns0Subnet get ecs from query msg
+func GetEdns0Subnet(query *dns.Msg) net.IP {
+	opt := query.IsEdns0()
+	if opt == nil {
+		return nil
+	}
+	for _, s := range opt.Option {
+		switch e := s.(type) {
+			case *dns.EDNS0_SUBNET:
+				return e.Address
+		}
+	}
+	return nil
 }

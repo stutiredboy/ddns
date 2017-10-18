@@ -88,13 +88,18 @@ func NewServer(c Configurations) (*Server, error) {
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		// If no upstream proxy is present, drop the query:
 		if len(c.NameServers) == 0 {
+			log.Printf("no nameservers, drop query")
 			dns.HandleFailed(w, r)
 			return
 		}
-
 		if c.Debug {
 			ecs := GetEdns0Subnet(r)
-			log.Printf("query %s from %s ecs %s", r.Question[0].Name, w.RemoteAddr(), ecs.String())
+			log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
+		}
+		if len(r.Question) == 0 {
+			log.Printf("no query Question, drop query")
+			dns.HandleFailed(w, r)
+			return
 		}
 		// send query info to channel
 		name := strings.ToLower(strings.TrimSuffix(r.Question[0].Name, "."))

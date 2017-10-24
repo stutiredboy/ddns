@@ -96,7 +96,7 @@ func NewServer(c Configurations) (*Server, error) {
 			ecs := GetEdns0Subnet(r)
 			log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
 		}
-		if len(r.Question) == 0 {
+		if r == nil || r.Question == nil || len(r.Question) == 0 {
 			log.Printf("no query Question, drop query")
 			dns.HandleFailed(w, r)
 			return

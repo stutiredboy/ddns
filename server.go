@@ -96,7 +96,14 @@ func NewServer(c Configurations) (*Server, error) {
 			ecs := GetEdns0Subnet(r)
 			log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
 		}
-		if r == nil || r.Question == nil || len(r.Question) == 0 {
+		/* r == nil:
+		  panic: runtime error: invalid memory address or nil pointer dereference
+		*/
+		if r == nil {
+			log.Printf("dns Msg is nil, ignore it.")
+			return
+		}
+		if r.Question == nil || len(r.Question) == 0 {
 			log.Printf("no query Question, drop query")
 			dns.HandleFailed(w, r)
 			return

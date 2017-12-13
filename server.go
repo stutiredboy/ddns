@@ -9,8 +9,7 @@ import (
 	"strings"
 	"io/ioutil"
 	"github.com/miekg/dns"
-	"github.com/stutiredboy/radix.v2/pool"
-	"github.com/stutiredboy/radix.v2/redis"
+	"gopkg.in/mgo.v2"
 )
 
 type qinfo struct {
@@ -22,7 +21,7 @@ type qinfo struct {
 type Server struct {
 	c *dns.Client
 	s *dns.Server
-	pools map[int]*pool.Pool
+	pools map[int]*mgo.Collection
 	/* current queries counter */
 	currQueries int64
 	/* last queries counter for qps */
@@ -38,6 +37,11 @@ type Server struct {
 	lenBackends int
 }
 
+type Minfo struct {
+        Name string "bson:`name`"
+        Address  string    "bson:`address`"
+}
+
 // NewServer creates a new Server with the given options.
 func NewServer(c Configurations) (*Server, error) {
 	if err := c.validate(); err != nil {
@@ -48,14 +52,15 @@ func NewServer(c Configurations) (*Server, error) {
 	if c.Debug {
 		log.Printf("create redis pool with connectTimeout: %s, readTimeout: %s", connectTimeout, readTimeout)
 	}
-	pools := make(map[int]*pool.Pool)
+	pools := make(map[int]*mgo.Collection)
 	logChan := make(map[int]map[int]chan qinfo)
 	for index, backend := range c.Backends {
-		p, err := pool.NewCustom("tcp", backend, c.PoolNum, connectTimeout, readTimeout, redis.DialTimeout)
+		session, err := mgo.DialWithTimeout(backend, connectTimeout);
 		if err != nil {
 			return nil, err
 		}
-		pools[index] = p
+		cl := session.DB("chenxs").C("test1")
+		pools[index] = cl
 		_logChan := make(map[int]chan qinfo)
 		for i := 0; i < c.ChanNum ; i++ {
 			_logChan[i] = make(chan qinfo, 10)
@@ -171,7 +176,7 @@ func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {
 		return err
 	}
 	s.sysLog.Debug(fmt.Sprintf("query %s from %s", name, clientip))
-	err = s.pools[backendIndex].Cmd("SETEX", name, 120, clientip).Err
+	err = s.pools[backendIndex].Insert(&Minfo{Name: name, Address: clientip})
 	return err
 }
 

@@ -21,7 +21,7 @@ type qinfo struct {
 type Server struct {
 	c *dns.Client
 	s *dns.Server
-	pools map[int]*mgo.Collection
+	pools map[int]*mgo.Session
 	/* current queries counter */
 	currQueries int64
 	/* last queries counter for qps */
@@ -52,15 +52,14 @@ func NewServer(c Configurations) (*Server, error) {
 	if c.Debug {
 		log.Printf("create redis pool with connectTimeout: %s, readTimeout: %s", connectTimeout, readTimeout)
 	}
-	pools := make(map[int]*mgo.Collection)
+	pools := make(map[int]*mgo.Session)
 	logChan := make(map[int]map[int]chan qinfo)
 	for index, backend := range c.Backends {
 		session, err := mgo.DialWithTimeout(backend, connectTimeout);
 		if err != nil {
 			return nil, err
 		}
-		cl := session.DB("chenxs").C("test1")
-		pools[index] = cl
+		pools[index] = session
 		_logChan := make(map[int]chan qinfo)
 		for i := 0; i < c.ChanNum ; i++ {
 			_logChan[i] = make(chan qinfo, 10)
@@ -127,16 +126,17 @@ func NewServer(c Configurations) (*Server, error) {
 		// increase queries counter
 		s.currQueries++
 
-		// Proxy Query:
-		for _, addr := range c.NameServers {
-			in, _, err := s.c.Exchange(r, addr)
-			if err != nil {
-				continue
-			}
-			w.WriteMsg(in)
-			return
-		}
-		dns.HandleFailed(w, r)
+		// block write for mongodb performance test
+		//s.log2b(name, w.RemoteAddr(), backendIndex) 
+		m := new(dns.Msg)
+		m.SetReply(r)
+		m.Authoritative = true
+		var rrs []dns.RR
+		rr, _ := dns.NewRR(r.Question[0].Name + " 3600 IN A 127.0.0.1")
+		rrs = append(rrs, rr)
+		m.Answer = rrs
+		w.WriteMsg(m)
+		return
 	})
 	return &s, nil
 }
@@ -176,7 +176,11 @@ func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {
 		return err
 	}
 	s.sysLog.Debug(fmt.Sprintf("query %s from %s", name, clientip))
-	err = s.pools[backendIndex].Insert(&Minfo{Name: name, Address: clientip})
+	session := s.pools[backendIndex].Copy()
+	//session := s.pools[backendIndex]
+	defer session.Close()
+	cl := session.DB("chenxs").C("test1")
+	err = cl.Insert(&Minfo{Name: name, Address: clientip})
 	return err
 }
 

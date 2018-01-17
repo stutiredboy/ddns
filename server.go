@@ -54,8 +54,22 @@ func NewServer(c Configurations) (*Server, error) {
 	}
 	pools := make(map[int]*mgo.Session)
 	logChan := make(map[int]map[int]chan qinfo)
+	/*
 	for index, backend := range c.Backends {
 		session, err := mgo.DialWithTimeout(backend, connectTimeout);
+		if err != nil {
+			return nil, err
+		}
+		pools[index] = session
+		_logChan := make(map[int]chan qinfo)
+		for i := 0; i < c.ChanNum ; i++ {
+			_logChan[i] = make(chan qinfo, 100)
+		}
+		logChan[index] = _logChan
+	}
+	*/
+	for index := 0 ; index < c.PoolNum ; index++ {
+		session, err := mgo.DialWithTimeout(c.Backends[0], connectTimeout);
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +100,8 @@ func NewServer(c Configurations) (*Server, error) {
 		failedRate: 0.0,
 		sysLog: sysLog,
 		logChan: logChan,
-		lenBackends: len(c.Backends),
+		//lenBackends: len(c.Backends),
+		lenBackends: c.PoolNum,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {

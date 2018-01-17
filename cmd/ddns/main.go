@@ -52,7 +52,8 @@ func main() {
 
 		// log query counter periodically
 		runPeriodically(s.Dump, conf.StatsPeriod, conf.StatsFile)
-		log2b(s.Log2b, len(conf.Backends), conf.ChanNum)
+		//log2b(s.Log2b, len(conf.Backends), conf.ChanNum)
+		log2b(s.Log2b, conf.PoolNum, conf.ChanNum)
 
 		defer s.Shutdown() // in case of normal exit
 

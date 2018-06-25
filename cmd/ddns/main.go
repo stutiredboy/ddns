@@ -34,6 +34,8 @@ func main() {
 			log.Fatalf("File error: %v\n", err)
 		}
 		var conf ddns.Configurations
+        // set default expires
+        conf.ExpiresIn = 120
 		err = json.Unmarshal(config, &conf)
 		if err != nil {
 			log.Fatalf("Unmarshal error: %v\n", err)

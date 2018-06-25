@@ -24,6 +24,7 @@ type Configurations struct {
     ConnectTimeout int
     // millseconds
     ReadTimeout int
+    ExpiresIn int
     Debug bool
 }
 

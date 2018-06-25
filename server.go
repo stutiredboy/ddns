@@ -36,6 +36,7 @@ type Server struct {
 	sysLog *syslog.Writer
 	logChan map[int]map[int]chan qinfo
 	lenBackends int
+    ExpiresIn int
 }
 
 // NewServer creates a new Server with the given options.
@@ -83,6 +84,7 @@ func NewServer(c Configurations) (*Server, error) {
 		sysLog: sysLog,
 		logChan: logChan,
 		lenBackends: len(c.Backends),
+        ExpiresIn: c.ExpiresIn,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -171,7 +173,7 @@ func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {
 		return err
 	}
 	s.sysLog.Debug(fmt.Sprintf("query %s from %s", name, clientip))
-	err = s.pools[backendIndex].Cmd("SETEX", name, 120, clientip).Err
+	err = s.pools[backendIndex].Cmd("SETEX", name, s.ExpiresIn, clientip).Err
 	return err
 }
 

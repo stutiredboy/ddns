@@ -5,29 +5,29 @@ import (
 )
 
 func Test_backendHas(t *testing.T) {
-	hash_exist := backendHash("www.163.com")
+	hashExist := backendHash("www.163.com")
 	//hash := backendHash("Hello234")
 	/* must compatible with Python zlib.crc32('www.163.com') or binascii.crc32('www.163.com') */
-	if (hash_exist != 832174588) {
-		t.Error("%s", hash_exist)
+	if hashExist != 832174588 {
+		t.Errorf("%d", hashExist)
 		t.Error("test func *backendHash* error")
 	}
-	hash_nil := backendHash("")
-	if (hash_nil != 0) {
-		t.Error("%s", hash_nil)
+	hashNil := backendHash("")
+	if hashNil != 0 {
+		t.Errorf("%d", hashNil)
 		t.Error("test func *backendHash* error")
 	}
 }
 
-func Test_channelHash(t *testing.T){
-	hash_exist := channelHash("www.163.com")
-	if (hash_exist != 684573356) {
-		t.Error("%s", hash_exist)
+func Test_channelHash(t *testing.T) {
+	hashExist := channelHash("www.163.com")
+	if hashExist != 684573356 {
+		t.Errorf("%d", hashExist)
 		t.Error("test func *channelHash* error")
 	}
-	hash_nil := channelHash("")
-	if (hash_nil != 0) {
-		t.Error("%s", hash_nil)
+	hashNil := channelHash("")
+	if hashNil != 0 {
+		t.Errorf("%d", hashNil)
 		t.Error("test func *channelHash* error")
 	}
 }

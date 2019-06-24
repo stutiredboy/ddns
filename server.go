@@ -1,13 +1,14 @@
 package ddns
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"log/syslog"
 	"net"
-	"fmt"
-	"time"
 	"strings"
-	"io/ioutil"
+	"time"
+
 	"github.com/miekg/dns"
 	"github.com/stutiredboy/radix.v2/pool"
 	"github.com/stutiredboy/radix.v2/redis"
@@ -20,8 +21,8 @@ type qinfo struct {
 
 // Server implements a DNS server.
 type Server struct {
-	c *dns.Client
-	s *dns.Server
+	c     *dns.Client
+	s     *dns.Server
 	pools map[int]*pool.Pool
 	/* current queries counter */
 	currQueries int64
@@ -32,11 +33,11 @@ type Server struct {
 	/* last failed counter */
 	lastFailed int64
 	/* failedRate */
-	failedRate float64
-	sysLog *syslog.Writer
-	logChan map[int]map[int]chan qinfo
+	failedRate  float64
+	sysLog      *syslog.Writer
+	logChan     map[int]map[int]chan qinfo
 	lenBackends int
-    ExpiresIn int
+	ExpiresIn   int
 }
 
 // NewServer creates a new Server with the given options.
@@ -58,7 +59,7 @@ func NewServer(c Configurations) (*Server, error) {
 		}
 		pools[index] = p
 		_logChan := make(map[int]chan qinfo)
-		for i := 0; i < c.ChanNum ; i++ {
+		for i := 0; i < c.ChanNum; i++ {
 			_logChan[i] = make(chan qinfo, 10)
 		}
 		logChan[index] = _logChan
@@ -75,16 +76,16 @@ func NewServer(c Configurations) (*Server, error) {
 			Net:  "udp",
 			Addr: c.Listen,
 		},
-		pools: pools,
+		pools:       pools,
 		currQueries: 0,
 		lastQueries: 0,
-		currFailed: 0,
-		lastFailed: 0,
-		failedRate: 0.0,
-		sysLog: sysLog,
-		logChan: logChan,
+		currFailed:  0,
+		lastFailed:  0,
+		failedRate:  0.0,
+		sysLog:      sysLog,
+		logChan:     logChan,
 		lenBackends: len(c.Backends),
-        ExpiresIn: c.ExpiresIn,
+		ExpiresIn:   c.ExpiresIn,
 	}
 
 	s.s.Handler = dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
@@ -94,12 +95,17 @@ func NewServer(c Configurations) (*Server, error) {
 			dns.HandleFailed(w, r)
 			return
 		}
+		isEdns0 := true
+		ecs := GetEdns0Subnet(r)
+		if ecs == nil {
+			isEdns0 = false
+			ecs = SetEdns0Subnet(r, w.RemoteAddr())
+		}
 		if c.Debug {
-			ecs := GetEdns0Subnet(r)
 			log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
 		}
 		/* r == nil:
-		  panic: runtime error: invalid memory address or nil pointer dereference
+		panic: runtime error: invalid memory address or nil pointer dereference
 		*/
 		if r == nil {
 			log.Printf("dns Msg is nil, ignore it.")
@@ -116,10 +122,10 @@ func NewServer(c Configurations) (*Server, error) {
 		backendIndex := backendHash(name) % s.lenBackends
 		chanIndex := channelHash(name) % c.ChanNum
 		select {
-			case s.logChan[backendIndex][chanIndex] <- qinfo{name, w.RemoteAddr()}:
-			default:
-				s.currFailed++
-				log.Printf("receive query %s %s, but backend %d channel%d full", r.Question[0].Name, w.RemoteAddr(), backendIndex, chanIndex)
+		case s.logChan[backendIndex][chanIndex] <- qinfo{name, w.RemoteAddr()}:
+		default:
+			s.currFailed++
+			log.Printf("receive query %s %s, but backend %d channel%d full", r.Question[0].Name, w.RemoteAddr(), backendIndex, chanIndex)
 		}
 		// increase queries counter
 		s.currQueries++
@@ -129,6 +135,9 @@ func NewServer(c Configurations) (*Server, error) {
 			in, _, err := s.c.Exchange(r, addr)
 			if err != nil {
 				continue
+			}
+			if !isEdns0 {
+				RemoveEdns0Subnet(in)
 			}
 			w.WriteMsg(in)
 			return
@@ -150,11 +159,11 @@ func (s *Server) Shutdown() error {
 
 // Dump the stats of ddns
 func (s *Server) Dump(period int, saveto string) {
-        qps := (s.currQueries - s.lastQueries) / int64(period)
+	qps := (s.currQueries - s.lastQueries) / int64(period)
 	if qps > 0 {
-		s.failedRate = float64(s.currFailed - s.lastFailed) / float64(s.currQueries - s.lastQueries)
+		s.failedRate = float64(s.currFailed-s.lastFailed) / float64(s.currQueries-s.lastQueries)
 	}
-        log.Printf("total queries: %d, qps: %d, log failed: %d, failed rate: %f", s.currQueries, qps, s.currFailed, s.failedRate)
+	log.Printf("total queries: %d, qps: %d, log failed: %d, failed rate: %f", s.currQueries, qps, s.currFailed, s.failedRate)
 	if saveto != "" {
 		err := ioutil.WriteFile(saveto, []byte(fmt.Sprintf("total queries: %d\nlog failed: %d\nfailed rate: %f", s.currQueries, s.currFailed, s.failedRate)), 644)
 		if err != nil {
@@ -179,9 +188,9 @@ func (s *Server) log2b(name string, addr net.Addr, backendIndex int) error {
 
 // Log2b log quureies to backend by different channel/backend
 func (s *Server) Log2b(backendIndex int, chanIndex int) {
-	log.Printf("listening to backend %d channel %d" , backendIndex, chanIndex)
+	log.Printf("listening to backend %d channel %d", backendIndex, chanIndex)
 	for {
-		query := <- s.logChan[backendIndex][chanIndex]
+		query := <-s.logChan[backendIndex][chanIndex]
 		err := s.log2b(query.name, query.addr, backendIndex)
 		if err != nil {
 			log.Printf("backend %d channel %d log2b %s %s raise err: %s", backendIndex, chanIndex, query.name, query.addr, err)
@@ -197,8 +206,77 @@ func GetEdns0Subnet(query *dns.Msg) net.IP {
 	}
 	for _, s := range opt.Option {
 		switch e := s.(type) {
-			case *dns.EDNS0_SUBNET:
-				return e.Address
+		case *dns.EDNS0_SUBNET:
+			return e.Address
+		}
+	}
+	return nil
+}
+
+// SetEdns0Subnet append client subnet to dns query
+func SetEdns0Subnet(query *dns.Msg, addr net.Addr) net.IP {
+	// append EDNS0_SUBNET to query
+	var remoteAddr net.IP
+	// 1 for IPv4, 2 for IPv6
+	var addrFamily uint16
+	// 32 for IPv4, 128 for IPv6
+	var netMask uint8
+
+	if addr.(*net.UDPAddr).IP.To16() != nil && addr.(*net.UDPAddr).IP.To4() == nil {
+		addrFamily = 2
+		netMask = 128
+		remoteAddr = addr.(*net.UDPAddr).IP.To16()
+	} else {
+		addrFamily = 1
+		netMask = 32
+		remoteAddr = addr.(*net.UDPAddr).IP.To4()
+	}
+	o := new(dns.OPT)
+	o.Hdr.Name = "."
+	o.Hdr.Rrtype = dns.TypeOPT
+	e := new(dns.EDNS0_SUBNET)
+	e.Code = dns.EDNS0SUBNET
+	// 1 for IPv4 source addr, 2 for IPv6 source addr
+	e.Family = addrFamily
+	// 32 for IPv4, 128 for IPv6
+	e.SourceNetmask = netMask
+	e.SourceScope = 0
+	e.Address = remoteAddr
+	// have EDNS0 Option already
+	for i := len(query.Extra) - 1; i >= 0; i-- {
+		if query.Extra[i].Header().Rrtype == dns.TypeOPT {
+			opt := query.Extra[i].(*dns.OPT)
+			opt.Option = append(opt.Option, e)
+			query.Extra = append(query.Extra[:i], query.Extra[i+1:]...)
+			query.Extra = append(query.Extra, opt)
+			return e.Address
+		}
+	}
+	// client query without EDNS0 Option
+	o.Option = append(o.Option, e)
+	query.Extra = append(query.Extra, o)
+	return e.Address
+}
+
+// RemoveEdns0Subnet remove EDNS Subnet from answer section
+func RemoveEdns0Subnet(answer *dns.Msg) error {
+	// RFC 6891, Section 6.1.1 allows the OPT record to appear
+	// anywhere in the additional record section, but it's usually at
+	// the end so start there.
+	for i := len(answer.Extra) - 1; i >= 0; i-- {
+		if answer.Extra[i].Header().Rrtype == dns.TypeOPT {
+			// opt := answer.Extra[i].(*dns.OPT)
+			// answer.Extra = append(answer.Extra[:i], answer.Extra[i+1:]...)
+			opt := answer.Extra[i].(*dns.OPT)
+			for oi := len(opt.Option) - 1; oi >= 0; oi-- {
+				switch opt.Option[oi].(type) {
+				case *dns.EDNS0_SUBNET:
+					opt.Option = append(opt.Option[:oi], opt.Option[oi+1:]...)
+					answer.Extra = append(answer.Extra[:i], answer.Extra[i+1:]...)
+					answer.Extra = append(answer.Extra, opt)
+					return nil
+				}
+			}
 		}
 	}
 	return nil

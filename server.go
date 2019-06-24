@@ -95,14 +95,21 @@ func NewServer(c Configurations) (*Server, error) {
 			dns.HandleFailed(w, r)
 			return
 		}
-		isEdns0 := true
-		ecs := GetEdns0Subnet(r)
-		if ecs == nil {
-			isEdns0 = false
+		isEdns0 := r.IsEdns0()
+		isEcs := GetEdns0Subnet(r)
+		var ecs net.IP
+
+		if isEcs == nil {
 			ecs = SetEdns0Subnet(r, w.RemoteAddr())
+		} else {
+			ecs = isEcs
 		}
 		if c.Debug {
-			log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
+			if isEcs == nil {
+				log.Printf("query %+v from %s msg %+v with ecs nil", r.Question, w.RemoteAddr(), r.MsgHdr)
+			} else {
+				log.Printf("query %+v from %s msg %+v with ecs %s", r.Question, w.RemoteAddr(), r.MsgHdr, ecs.String())
+			}
 		}
 		/* r == nil:
 		panic: runtime error: invalid memory address or nil pointer dereference
@@ -136,8 +143,14 @@ func NewServer(c Configurations) (*Server, error) {
 			if err != nil {
 				continue
 			}
-			if !isEdns0 {
-				RemoveEdns0Subnet(in)
+			// without Edns0, remove all Edns0 OPT
+			if isEdns0 == nil {
+				RemoveEdns0(in)
+			} else {
+				// has Edns0 support, but subnet is nil, only remove ECS OPT
+				if isEcs == nil {
+					RemoveEdns0Subnet(in)
+				}
 			}
 			w.WriteMsg(in)
 			return
@@ -231,9 +244,7 @@ func SetEdns0Subnet(query *dns.Msg, addr net.Addr) net.IP {
 		netMask = 32
 		remoteAddr = addr.(*net.UDPAddr).IP.To4()
 	}
-	o := new(dns.OPT)
-	o.Hdr.Name = "."
-	o.Hdr.Rrtype = dns.TypeOPT
+
 	e := new(dns.EDNS0_SUBNET)
 	e.Code = dns.EDNS0SUBNET
 	// 1 for IPv4 source addr, 2 for IPv6 source addr
@@ -253,9 +264,26 @@ func SetEdns0Subnet(query *dns.Msg, addr net.Addr) net.IP {
 		}
 	}
 	// client query without EDNS0 Option
+	o := new(dns.OPT)
+	o.Hdr.Name = "."
+	o.Hdr.Rrtype = dns.TypeOPT
 	o.Option = append(o.Option, e)
 	query.Extra = append(query.Extra, o)
 	return e.Address
+}
+
+// RemoveEdns0 remove EDNS0 from answer section
+func RemoveEdns0(answer *dns.Msg) error {
+	// RFC 6891, Section 6.1.1 allows the OPT record to appear
+	// anywhere in the additional record section, but it's usually at
+	// the end so start there.
+	for i := len(answer.Extra) - 1; i >= 0; i-- {
+		if answer.Extra[i].Header().Rrtype == dns.TypeOPT {
+			// opt := answer.Extra[i].(*dns.OPT)
+			answer.Extra = append(answer.Extra[:i], answer.Extra[i+1:]...)
+		}
+	}
+	return nil
 }
 
 // RemoveEdns0Subnet remove EDNS Subnet from answer section
